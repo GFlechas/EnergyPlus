@@ -110,3 +110,6 @@ venv/
 .venv/
 
 .ccache/
+
+# Local design documents and analysis outputs (not part of the upstream project)
+design_and_analysis/
