@@ -4,6 +4,8 @@
 
 The combined heat and moisture transfer finite (HAMT) solution algorithm is a completely coupled, one-dimensional, finite element, heat and moisture transfer model simulating the movement and storage of heat and moisture in surfaces simultaneously from and to both the internal and external environments. As well as simulating the effects of moisture buffering, HAMT is also be able to provide temperature and moisture profiles through composite building walls, and help to identify surfaces with high surface humidity.
 
+The cell heat and moisture balance equations described below are common to every version of the model. The schemes differ only in how the resulting system of cell equations is advanced in time and solved. Three solution schemes are available, selected through the \emph{Difference Scheme} field of the HeatBalanceSettings:HeatAndMoistureTransfer object (see the Input Output Reference): the original Gauss-Seidel point-iterative solver; a Thomas (tridiagonal direct) solver with first-order backward-Euler time stepping; and a Thomas solver with second-order backward differentiation (BDF2) time stepping, which is the default. The Gauss-Seidel scheme is retained unchanged for backward compatibility; the two Thomas-based schemes were added in 2026. Each scheme is described in the \hyperref[heat-transfer]{Heat Transfer} section below.
+
 \subsection{HAMT Nomenclature}\label{hamt-nomenclature}
 
 Dependencies on moisture content are indicated by a superscript \(^{w}\), on heat by a superscript \(^{h}\) and vapor pressure by a superscript \(^{v}\).
@@ -34,6 +36,8 @@ ${k^w}$ & W/mC & Moisture dependent thermal conductivity \tabularnewline
 p & Pa & Vapor pressure \tabularnewline
 $p_{\text{ambient}}$ & Pa & Ambient air pressure \tabularnewline
 p(as a superscript) & s & Present Time Step \tabularnewline
+p+1(as a superscript) & --- & Next (future) Time Step \tabularnewline
+p-1(as a superscript) & --- & Previous Time Step (used by the BDF2 scheme) \tabularnewline
 P & $m^3/m^3$ & Material Porosity \tabularnewline
 ${q_i^{adds}}$ & W & Heat from additional Sources \tabularnewline
 ${q_i^v}$ & W & Heat due to Vaporisation \tabularnewline
@@ -90,7 +94,15 @@ The following sections describe how the above equations are used within the HAMT
 
 \subsubsection{Surfaces, Material Layers and Cells}\label{surfaces-material-layers-and-cells}
 
-``Surfaces'' are made of a number of layers of potentially any combination of materials. Each surface is split into its constituent materials and is then split up further into cells through its depth. HAMT will generate no more than 10 cells per material with widths that are thinner near the boundaries of each material where most changes are expected and detail is needed.
+``Surfaces'' are made of a number of layers of potentially any combination of materials. Each surface is split into its constituent materials and is then split up further into cells through its depth. Cells are made thinner near the boundaries of each material, where the largest gradients occur and the most detail is needed, and coarser toward the layer interior.
+
+The number of cells per material layer is determined from a physics-based criterion. The target interior cell size is set by one thermal-diffusion length per time step,
+
+\begin{equation}
+\Delta {x_n} = \sqrt {\alpha \Delta \tau \, C}
+\end{equation}
+
+where \(\alpha\) is the material thermal diffusivity, \(\Delta \tau\) is the time step, and \(C\) is the dimensionless \emph{Space Discretization Constant} (Fourier number; \(C = 1\) corresponds to a Fourier number of one). A separate, typically finer, constant \(C_b\) controls the near-face (boundary) cells. The resulting cell count per layer may be bounded below and above by the optional \emph{Minimum} and \emph{Maximum Cells Per Material Layer} inputs. All of these controls are set through the HeatBalanceSettings:HeatAndMoistureTransfer object (see the Input Output Reference) and apply identically to every solution scheme. When that object is omitted, default values are used. The same cosine-based cell spacing is used regardless of the cell count.
 
 \subsubsection{Heat Transfer}\label{heat-transfer}
 
@@ -115,7 +127,40 @@ T_i^{p + 1} = \frac{{\sum\nolimits_j {\frac{{T_j^{p + 1}}}{{R_{ij}^h}}}  + q_i^v
 
 where \(C_i^h = \left( {{c_i}{\rho_i} + {c^w}{w_i}} \right)\Delta {V_i}\) is thermal heat capacitance of cell i and \(R_{ij}^h = \frac{x_{ij}}{k_{ij}A_{ij}}\) ~is the thermal resistance between cells i and j.
 
-This equation can be solved using the Gauss-Seidel iteration technique. The i\(^{th}\) cell temperature is calculated whilst the j\(^{th}\) cell temperatures are kept as up to date as possible. The iteration is stopped when the maximum difference between two consecutive calculations in all cells is less than a threshold of 0.002°C.
+The cell equation~\ref{eq:TemperatureIthCell} is common to all three solution schemes. The schemes differ only in how the time derivative on the left of the cell heat balance is approximated and in how the resulting set of cell equations is solved. The scheme is chosen with the \emph{Difference Scheme} field of the HeatBalanceSettings:HeatAndMoistureTransfer object.
+
+\paragraph{Gauss-Seidel Scheme}\label{heat-transfer-gauss-seidel}
+
+This is the original HAMT solver, retained unchanged for backward compatibility, and is selected with \emph{Difference Scheme} = FullyImplicitFirstOrder-GaussSeidel. Equation~\ref{eq:TemperatureIthCell} is solved using the Gauss-Seidel iteration technique. The i\(^{th}\) cell temperature is calculated whilst the j\(^{th}\) cell temperatures are kept as up to date as possible. The iteration is stopped when the maximum difference between two consecutive calculations in all cells is less than a threshold of 0.002°C. The time derivative is approximated with a first-order backward (implicit) difference, so the scheme is first-order accurate in time.
+
+\paragraph{Fully Implicit First Order (Thomas) Scheme}\label{heat-transfer-thomas}
+
+Selected with \emph{Difference Scheme} = FullyImplicitFirstOrder-Thomas. In the one-dimensional case each cell i is coupled only to its two neighbours, so the complete set of cell equations forms a tridiagonal system. Rather than sweeping point by point, this scheme assembles that system and solves it directly with the Thomas algorithm (the tridiagonal matrix algorithm). Using the same first-order backward (implicit) time difference as the Gauss-Seidel scheme, the heat balance for cell i is written in tridiagonal form,
+
+\begin{equation}
+- \frac{T_{i-1}^{p+1}}{R_{i,i-1}^h} + \left( {\frac{{C_i^h}}{{\Delta \tau }} + \sum\limits_j {\frac{1}{{R_{ij}^h}}} } \right)T_i^{p+1} - \frac{T_{i+1}^{p+1}}{R_{i,i+1}^h} = C_i^h\frac{{T_i^p}}{{\Delta \tau }} + q_i^v + q_i^{adds}
+\label{eq:HeatTransferThomas}
+\end{equation}
+
+Because this scheme uses the same backward-Euler time difference as the Gauss-Seidel scheme, it is also first-order accurate in time, O(\(\Delta \tau\)); for a given mesh and time step the two schemes produce the same result to within solver tolerance. The advantage of the Thomas form is that the system is solved directly in a single pass rather than iterated to convergence. The thermal resistances \(R_{ij}^h\), heat capacitance \(C_i^h\) and the moisture-dependent properties they contain are evaluated at the current cell state; because that state is itself unknown, the direct solve is wrapped in an outer Picard iteration that refreshes the properties and repeats the solve until the cell temperatures and relative humidities change by less than the convergence thresholds (\emph{Temperature} and \emph{Relative Humidity Convergence Threshold}). The moisture balance, Equation~\ref{eq:RelativeHumidityIthCell}, is solved as a companion tridiagonal system within the same outer iteration.
+
+\paragraph{Fully Implicit Second Order (BDF2) Scheme}\label{heat-transfer-bdf2}
+
+Selected with \emph{Difference Scheme} = FullyImplicitSecondOrder-Thomas; this is the default scheme. It uses the same tridiagonal (Thomas) direct solve and outer Picard iteration as the first-order scheme above, but replaces the first-order backward time difference with the second-order backward differentiation formula (BDF2). The time derivative of the storage term is approximated using the present and two previous time steps,
+
+\begin{equation}
+\frac{{\partial T_i}}{{\partial \tau }} \approx \frac{{3 T_i^{p+1} - 4 T_i^p + T_i^{p-1}}}{{2 \Delta \tau }}
+\label{eq:BDF2Stencil}
+\end{equation}
+
+so the tridiagonal heat balance for cell i becomes
+
+\begin{equation}
+- \frac{T_{i-1}^{p+1}}{R_{i,i-1}^h} + \left( {\frac{{3 C_i^h}}{{2 \Delta \tau }} + \sum\limits_j {\frac{1}{{R_{ij}^h}}} } \right)T_i^{p+1} - \frac{T_{i+1}^{p+1}}{R_{i,i+1}^h} = \frac{{C_i^h}}{{2 \Delta \tau }}\left( {4 T_i^p - T_i^{p-1}} \right) + q_i^v + q_i^{adds}
+\label{eq:HeatTransferBDF2}
+\end{equation}
+
+BDF2 is second-order accurate in time, O(\(\Delta \tau^2\)), while remaining A- and L-stable, so it allows coarser time steps for the same temporal accuracy at no additional cost per step. The scheme requires the temperature at two previous time steps (\(T_i^p\) and \(T_i^{p-1}\)); on the first time step of each environment, where \(T_i^{p-1}\) is not yet available, it falls back to the first-order backward difference for that single step. EnergyPlus supplies surface boundary conditions only at the present time step, so the boundary (surface) cell values needed at \(p+1\) are extrapolated forward from previous steps using a minmod slope limiter. The limiter recovers the full second-order accuracy when the boundary conditions vary smoothly but reverts to the present-step value at local extrema, preventing the overshoot that an unlimited linear extrapolation would produce when boundary conditions change abruptly. The moisture balance is advanced with the same BDF2 stencil.
 
 \subsubsection{Moisture Content w}\label{moisture-content-w}
 
@@ -157,7 +202,7 @@ R_{ij}^w = \frac{{{x_{ij}}}}{{{A_{ij}}D_{ij}^w\frac{{dw}}{{d\phi }}}}
 
 is the moisture resistance between cells i and j and \(R_{ij}^v = \frac{\mu_{ij}x_{ij}}{A_{ij}\delta_{ij}}\) ~is the vapor resistance~between cells i and j.
 
-Equation~\ref{eq:RelativeHumidityIthCell} can be used together with the heat equation~\ref{eq:TemperatureIthCell} in an alternate step by step fashion to calculate the new temperature and relative humidity profiles for each cell for the next time step.
+Equation~\ref{eq:RelativeHumidityIthCell} is used together with the heat equation~\ref{eq:TemperatureIthCell} to calculate the new temperature and relative humidity profiles for each cell for the next time step. In the Gauss-Seidel scheme the two equations are solved in an alternate step by step fashion. In the Thomas and BDF2 schemes the heat and moisture equations are each solved as tridiagonal systems within the same outer Picard iteration, which couples them through the moisture-dependent properties and refreshes those properties until both fields converge. The same time-discretization order chosen for the heat equation (backward Euler for the first-order scheme, BDF2 for the second-order scheme) is applied to the moisture storage term.
 
 Surfaces with Ground exterior boundary condition assumes saturated air ({100\%} relative humidity) condition to calculate the exterior mass transfer coefficient, which is used to model mass transport through a ground contact surfaces.
 
@@ -186,6 +231,8 @@ At the start of an EnergyPlus simulation ``warm up'' days are used to ensure tha
 As an illustration of the use of the Heat and Moisture Transfer (HAMT) model, the material properties for a small sample of six generic materials have been provided in the EnergyPlus Reference DataSets (MoistureMaterials.idf). The properties were synthesised from the Annex 24 database {[}Kumar Kumaran, M. (1996){]}, supplemented, when required, by data from the database of the WUFI model {[}WUFI (1999){]} and are therefore not related to any unique, measured material. Users should consult material property catalogues and other primary sources when the properties of a specific material are required.
 
 Moisture and heat from the surfaces are used by EnergyPlus to calculate the room air temperature and moisture content. EnergyPlus with HAMT works best with as short a time step as possible. However the optimum time step which gives a good prediction for a short computing time will very much depend on the nature of the weather and type of building. Buildings with frequent and large changes in internal and external temperature will need a small time step, maybe even 60 steps per hour. Slowly evolving temperatures and relative humidity's will not require such a short time step and 20, or even 6, steps per hour may be sufficient.
+
+The choice of solution scheme also affects this trade-off. Because the default second-order (BDF2) scheme reduces the time-discretization error from O(\(\Delta \tau\)) to O(\(\Delta \tau^2\)), it generally tolerates a coarser time step than the first-order Gauss-Seidel and Thomas schemes for the same level of temporal accuracy.
 
 \subsection{References}\label{references-012}
 

@@ -153,6 +153,7 @@ set(test_src
     HWBaseboardRadiator.unit.cc
     HeatBalFiniteDiffManager.unit.cc
     HeatBalanceAirManager.unit.cc
+    HeatBalanceHAMTManager.unit.cc
     HeatBalanceIntRadExchange.unit.cc
     HeatBalanceKivaManager.unit.cc
     HeatBalanceManager.unit.cc

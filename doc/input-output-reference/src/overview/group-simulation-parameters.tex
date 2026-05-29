@@ -362,7 +362,7 @@ Four values are allowed to select which solution will be used.
         \hyperref[materialpropertyphasechangehysteresis]{MaterialProperty:PhaseChangeHysteresis}
     \end{itemize}
     \item
-    \textbf{Advanced/Research usage:} The \textbf{CombinedHeatAndMoistureFiniteElement} is a coupled heat and moisture transfer and storage solution. The solution technique uses a one dimensional finite difference solution in the construction elements and requires further material properties described in the Heat and Moisture Transfer material properties objects. Outputs from the algorithm are described with these objects. The Heat and Moisture Transfer property objects are:
+    \textbf{Advanced/Research usage:} The \textbf{CombinedHeatAndMoistureFiniteElement} is a coupled heat and moisture transfer and storage solution. The solution technique uses a one dimensional finite difference solution in the construction elements and requires further material properties described in the Heat and Moisture Transfer material properties objects. The numerical behavior of the algorithm (solution scheme, spatial discretization, and convergence controls) is set with the \hyperref[heatbalancesettingsheatandmoisturetransfer]{HeatBalanceSettings:HeatAndMoistureTransfer} object. Outputs from the algorithm are described with these objects. The Heat and Moisture Transfer property objects are:
     \begin{itemize}
         \item
         \hyperref[materialpropertyheatandmoisturetransfersettings]{MaterialProperty:HeatAndMoistureTransfer:Settings}
@@ -454,6 +454,90 @@ HeatBalanceSettings:ConductionFiniteDifference,
   3.0,                        !- Space Discretization Constant
   1.0,                        !- Relaxation Factor
   0.002;                      !- Inside Face Surface Temperature Convergence Criteria
+\end{lstlisting}
+
+\subsection{HeatBalanceSettings:HeatAndMoistureTransfer}\label{heatbalancesettingsheatandmoisturetransfer}
+
+This object controls the numerical behavior of the Combined Heat and Moisture Transfer (HAMT) algorithm. It applies only to surfaces solved with the CombinedHeatAndMoistureFiniteElement algorithm, selected either globally through the \hyperref[heatbalancealgorithm]{HeatBalanceAlgorithm} object or per surface through SurfaceProperty:HeatTransferAlgorithm:* objects. The settings are global and affect every HAMT surface. The object is unique and optional; if it is omitted, the algorithm runs with the default values listed below (equivalent to including the object with all fields left blank). The theory behind each scheme is described in the Combined Heat and Moisture Transfer (HAMT) Model section of the Engineering Reference.
+
+\subsubsection{Inputs}\label{inputs-hamt-settings}
+
+\paragraph{Field: Difference Scheme}\label{field-difference-scheme-hamt}
+
+This field selects the time-integration scheme and linear solver used by the HAMT model. There are three options.
+
+\begin{itemize}
+    \item
+    \textbf{FullyImplicitSecondOrder-Thomas} is a tridiagonal (Thomas algorithm) direct solver with second-order Backward Differentiation Formula (BDF2) time stepping. It is second-order accurate in time while remaining A- and L-stable, so it allows coarser time steps for the same temporal accuracy at no additional cost per step. The first time step of each environment falls back to backward Euler while the two-step time history is established. This is the default.
+    \item
+    \textbf{FullyImplicitFirstOrder-Thomas} is the same tridiagonal direct solver with first-order backward-Euler time stepping. It is robust when boundary conditions change abruptly.
+    \item
+    \textbf{FullyImplicitFirstOrder-GaussSeidel} is the original HAMT solver, a point-iterative Gauss-Seidel scheme with backward-Euler time stepping, retained unchanged for backward compatibility.
+\end{itemize}
+
+The default is FullyImplicitSecondOrder-Thomas.
+
+\paragraph{Field: Space Discretization Constant}\label{field-space-discretization-constant-hamt}
+
+This field controls the spatial discretization, that is, the number of cells generated across each material layer. The nominal interior cell size \(\Delta x_n\) is calculated from one thermal-diffusion length per time step,
+
+\begin{equation}
+    \Delta x_n = \sqrt {\alpha \, \Delta t \, C}
+\end{equation}
+
+where \(\alpha\) is the thermal diffusivity of the material layer (m\(^{2}\)/s), \(\Delta t\) is the time step (s), and \emph{C} is the constant set by this field (the Fourier number; \(C = 1\) corresponds to a Fourier number of one). Larger values produce coarser grids and smaller values produce finer grids. This applies to all three schemes. The default is 1.0.
+
+\paragraph{Field: Boundary Layer Space Discretization Constant}\label{field-boundary-layer-space-discretization-constant}
+
+This field has the same units and meaning as the Space Discretization Constant but is applied to the near-face cell (the first cell adjacent to each material surface), which is typically made finer than the interior to capture surface transients. Set this to 0.0 to disable boundary refinement and rely only on the interior Space Discretization Constant. The default is 0.1.
+
+\paragraph{Field: Minimum Cells Per Material Layer}\label{field-minimum-cells-per-material-layer}
+
+Optional lower bound on the number of cells generated in each material layer. If left blank, no minimum is enforced and the physics-based criterion above alone determines the cell count.
+
+\paragraph{Field: Maximum Cells Per Material Layer}\label{field-maximum-cells-per-material-layer}
+
+Optional upper bound on the number of cells generated in each material layer. If left blank, no maximum is enforced. Set this to limit the computational cost for materials whose physics-based cell count grows large, such as very thick or slow-diffusing layers.
+
+\paragraph{Field: Maximum Iterations}\label{field-maximum-iterations-hamt}
+
+The maximum number of outer Picard iterations per time step for the Thomas and BDF2 schemes, or the maximum number of Gauss-Seidel sweeps per time step for the Gauss-Seidel scheme. If the solver reaches this limit without converging, a recurring warning is issued; the limit can be raised here when needed. The default is 150.
+
+\paragraph{Field: Temperature Convergence Threshold}\label{field-temperature-convergence-threshold-hamt}
+
+The maximum allowable change in cell temperature, in degrees Celsius, between successive iterations for the solution to be declared converged. The default is 0.002.
+
+\paragraph{Field: Relative Humidity Convergence Threshold}\label{field-relative-humidity-convergence-threshold-hamt}
+
+The maximum allowable change in cell relative humidity (as a fraction) between successive iterations for the solution to be declared converged. Both the temperature and the relative humidity thresholds must be satisfied for the outer iteration to be declared converged. Used by the Thomas and BDF2 schemes only. The default is 0.001.
+
+\paragraph{Field: Relaxation Factor}\label{field-relaxation-factor-hamt}
+
+An under-relaxation factor applied to the relative humidity iterate between outer iterations, \(\phi_{used} = \omega \, \phi_{new} + (1 - \omega)\, \phi_{old}\), where \(\omega\) is this factor. A value of 1.0 applies no relaxation; reduce it toward 0.5 if convergence oscillates for highly hygroscopic materials near saturation. This field has no effect for the Gauss-Seidel scheme. The default is 1.0.
+
+\paragraph{Field: Linearization Safety Temperature Threshold}\label{field-linearization-safety-temperature-threshold}
+
+Used by the Thomas and BDF2 schemes only. To save computation, these schemes evaluate the moisture-dependent material properties once at the start of each time step (a linearized first iteration). If the maximum cell temperature change from that entering state exceeds this threshold, in degrees Celsius, the solver refreshes the properties at the new state and performs another iteration. Small values (closer to the Temperature Convergence Threshold) recover the original property-refreshing behavior on every step; large values keep the fast single-iteration path. Tighten this threshold for materials with sharply nonlinear properties or during rapid wetting events. The default is 2.0.
+
+\paragraph{Field: Linearization Safety Relative Humidity Threshold}\label{field-linearization-safety-relative-humidity-threshold}
+
+Used by the Thomas and BDF2 schemes only. The companion to the Linearization Safety Temperature Threshold: if the maximum cell relative-humidity change (as a fraction) from the entering state exceeds this threshold, the solver refreshes properties and iterates again. The default is 0.05 (five percentage points).
+
+An example IDF object follows.
+
+\begin{lstlisting}
+HeatBalanceSettings:HeatAndMoistureTransfer,
+  FullyImplicitSecondOrder-Thomas,  !- Difference Scheme
+  1.0,                              !- Space Discretization Constant
+  0.1,                              !- Boundary Layer Space Discretization Constant
+  ,                                 !- Minimum Cells Per Material Layer
+  ,                                 !- Maximum Cells Per Material Layer
+  150,                              !- Maximum Iterations
+  0.002,                            !- Temperature Convergence Threshold
+  0.001,                            !- Relative Humidity Convergence Threshold
+  1.0,                              !- Relaxation Factor
+  2.0,                              !- Linearization Safety Temperature Threshold
+  0.05;                             !- Linearization Safety Relative Humidity Threshold
 \end{lstlisting}
 
 \subsection{ZoneAirHeatBalanceAlgorithm}\label{zoneairheatbalancealgorithm}

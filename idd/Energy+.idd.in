@@ -771,6 +771,122 @@ HeatBalanceSettings:ConductionFiniteDifference,
        \minimum 1.0E-7
        \maximum 0.01
 
+HeatBalanceSettings:HeatAndMoistureTransfer,
+       \memo Numerical settings for the HAMT (Combined Heat and Moisture Transfer)
+       \memo algorithm. Only applies to surfaces using
+       \memo HeatTransferAlgorithm=CombinedHeatAndMoistureFiniteElement.
+       \memo If this object is absent, the FullyImplicitFirstOrder-Thomas scheme
+       \memo runs with all defaults (equivalent to including this object with
+       \memo all fields left blank). To get the legacy GaussSeidel behaviour,
+       \memo set Difference Scheme = FullyImplicitFirstOrder-GaussSeidel.
+       \unique-object
+  A1 , \field Difference Scheme
+       \type choice
+       \key FullyImplicitFirstOrder-Thomas
+       \key FullyImplicitSecondOrder-Thomas
+       \key FullyImplicitFirstOrder-GaussSeidel
+       \default FullyImplicitSecondOrder-Thomas
+       \note FullyImplicitSecondOrder-Thomas: TDMA direct solver with BDF2 (second-order
+       \note   Backward Differentiation Formula) time stepping (2nd-order accurate).
+       \note   A- and L-stable. Default. Allows coarser timesteps for the same temporal
+       \note   accuracy at no extra per-step cost. First timestep of each environment
+       \note   falls back to backward-Euler while the T^{n-1} history is being established.
+       \note FullyImplicitFirstOrder-Thomas: TDMA direct solver with backward-Euler
+       \note   time stepping (1st-order accurate). Robust on step BC inputs.
+       \note FullyImplicitFirstOrder-GaussSeidel: Legacy iterative solver, retained
+       \note   for backward compatibility. Same Fourier-number meshing as the
+       \note   Thomas schemes when this object is present.
+  N1 , \field Space Discretization Constant
+       \note Scales the physics-based target interior cell size via
+       \note dxn = sqrt(alpha * dt * C). At C = 1.0 the cell size equals one
+       \note thermal-diffusion length per timestep (Fourier number Fo = 1).
+       \note Larger values produce coarser grids; smaller values produce finer grids.
+       \note Applies to all schemes (Thomas / BDF2 / GaussSeidel).
+       \type real
+       \default 1.0
+       \minimum> 0.0
+  N2 , \field Boundary Layer Space Discretization Constant
+       \note Same units and meaning as N1, but applied to the near-face cell
+       \note (first cell adjacent to each material surface). For each material
+       \note layer the maximum allowed first-cell half-width is:
+       \note   h = min( sqrt(alpha * dt * C_b),  sqrt(D_phi * dt * C_b) )
+       \note where C_b = this constant. The number of cells per layer is then
+       \note increased until thickness*(1-cos(pi/N))/4 <= h.
+       \note Default 0.1 = boundary cell ~ 1/sqrt(10) of a diffusion length —
+       \note finer than interior, to capture surface transients. Set to 0.0
+       \note to disable boundary refinement (rely only on N1 for sizing).
+       \note For vapor-resistant materials (high mu) D_phi << alpha so moisture
+       \note dominates; increase C_b or set Maximum Cells Per Material Layer
+       \note to limit total cell count.
+       \type real
+       \default 0.1
+       \minimum 0.0
+  N3 , \field Minimum Cells Per Material Layer
+       \note Optional. If blank, no minimum is enforced and the physics-based
+       \note Fourier criterion alone determines cell count.
+       \type integer
+       \minimum 1
+  N4 , \field Maximum Cells Per Material Layer
+       \note Optional. If blank, no maximum is enforced. Set this to bound
+       \note compute cost for materials whose Fourier-criterion cell count
+       \note grows large (e.g. very thick or slow-diffusing layers).
+       \type integer
+       \minimum 1
+  N5 , \field Maximum Iterations
+       \note Maximum outer Picard iterations per timestep for the Thomas and BDF2
+       \note schemes. Maximum sweep count for GaussSeidel.
+       \type integer
+       \default 150
+       \minimum 1
+       \maximum 10000
+  N6 , \field Temperature Convergence Threshold
+       \units deltaC
+       \type real
+       \default 0.002
+       \minimum> 0.0
+       \maximum 0.1
+  N7 , \field Relative Humidity Convergence Threshold
+       \note Used by the Thomas and BDF2 schemes only (not Gauss-Seidel).
+       \note Both temperature AND relative humidity thresholds must be satisfied
+       \note for the outer iteration to be declared converged.
+       \type real
+       \default 0.001
+       \minimum> 0.0
+       \maximum 0.1
+  N8 , \field Relaxation Factor
+       \note Applied to the relative humidity iterate between outer iterations.
+       \note phi_used = omega*phi_new + (1-omega)*phi_old.
+       \note 1.0 = no relaxation. Reduce toward 0.5 if convergence oscillates
+       \note for highly hygroscopic materials near saturation.
+       \note Has no effect when Difference Scheme = FullyImplicitFirstOrder-GaussSeidel.
+       \type real
+       \default 1.0
+       \minimum> 0.0
+       \maximum 1.0
+  N9 , \field Linearization Safety Temperature Threshold
+       \units deltaC
+       \note Used by the Thomas and BDF2 schemes only (not Gauss-Seidel).
+       \note After the linearized first iteration, if the maximum cell temperature
+       \note change from the entering state exceeds this threshold, the solver
+       \note refreshes material properties at the new state and runs another
+       \note iteration (up to Maximum Iterations). Small values (closer to the
+       \note convergence tolerance N6) recover the original Picard-with-refresh
+       \note behaviour; large values keep the fast linearized 1-iter path.
+       \note For materials with sharp iso/mu/tc curves or rapid wetting events,
+       \note tighten this threshold for safety.
+       \type real
+       \default 2.0
+       \minimum> 0.0
+  N10; \field Linearization Safety Relative Humidity Threshold
+       \note Used by the Thomas and BDF2 schemes only (not Gauss-Seidel).
+       \note Companion to N9: after the linearized first iteration, if the maximum
+       \note cell relative-humidity change (fraction) exceeds this threshold, the
+       \note solver refreshes properties and iterates again. Default 0.05 = 5 pp.
+       \type real
+       \default 0.05
+       \minimum> 0.0
+       \maximum 1.0
+
 ZoneAirHeatBalanceAlgorithm,
        \memo Controls the zone/space air heat balance.
        \unique-object

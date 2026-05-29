@@ -1088,6 +1088,10 @@ MaterialProperty:HeatAndMoistureTransfer:ThermalConductivity
   Zone,Average,HAMT Surface Outside Face Temperature {[}C{]}
 \item
   Zone,Average,HAMT Surface Outside Face Relative Humidity {[}\%{]}
+\item
+  Zone,Average,HAMT Surface Outside Face Vapor Pressure {[}Pa{]}
+\item
+  Zone,Average,HAMT Surface Linearization Iterations {[}{]}
 \end{itemize}
 
 \paragraph{HAMT Surface Average Water Content Ratio {[}kg/kg{]}}\label{hamt-surface-average-water-content-ratio-kgkg}
@@ -1116,6 +1120,14 @@ This output is the temperature on the external ``surface'' of the surface.
 
 This output is the relative humidity on the external ``surface'' of the surface.
 
+\paragraph{HAMT Surface Outside Face Vapor Pressure {[}Pa{]}}\label{hamt-surface-outside-face-vapor-pressure-pa}
+
+This output is the vapor pressure {[}Pa{]} on the external ``surface'' of the surface. It is the exterior counterpart to the HAMT Surface Inside Face Vapor Pressure output and is useful for interstitial condensation and Glaser-type analyses.
+
+\paragraph{HAMT Surface Linearization Iterations {[}{]}}\label{hamt-surface-linearization-iterations}
+
+This output is the number of solver iterations taken on the most recent time step for the surface. For the Thomas and BDF2 schemes it is the number of outer Picard iterations (1 indicates the fast linearized path was sufficient; 2 or more indicates the linearization safety net refreshed material properties and iterated again). For the Gauss-Seidel scheme it is the number of sweeps performed. It is a diagnostic for tuning the convergence and linearization-safety thresholds.
+
 \subsubsection{Internal Cell Outputs}\label{internal-cell-outputs}
 
 Detailed profile data for the variables Temperature {[}C{]}, Relative Humidity {[}\%{]} and Water Content {[}kg/kg{]} within each surface can also be reported. To calculate the heat and moisture transfer through surfaces HAMT splits up surfaces into discrete cells. Each cell is composed of a single material and has a position within the surface. HAMT automatically assigns cells to construction objects so that there are more cells closer to boundaries between materials and also at the ``surfaces'' of the surface. It is not possible for users to define their own cells.
@@ -1138,6 +1150,10 @@ Users can select any one of the Temperature, Relative Humidity or Water Content 
   Zone,Average,HAMT Surface Water Content Cell N {[}kg/kg{]}
 \item
   Zone,Average,HAMT Surface Relative Humidity Cell N {[}\%{]}
+\item
+  Zone,Average,HAMT Surface Vapor Pressure Cell N {[}Pa{]}
+\item
+  Zone,Average,HAMT Surface Heat Flux Cell N {[}W/m2{]}
 \end{itemize}
 
 \paragraph{HAMT Surface Relative Humidity Cell \textless{}N\textgreater{} {[}\%{]}}\label{hamt-surface-relative-humidity-cell-n}
@@ -1151,6 +1167,14 @@ This is the temperature of the cell in the surface.
 \paragraph{HAMT Surface Water Content Cell \textless{}N\textgreater{} {[}kg/kg{]}}\label{hamt-surface-water-content-cell-n-kgkg}
 
 This is the relative water content of the cell in the surface.
+
+\paragraph{HAMT Surface Vapor Pressure Cell \textless{}N\textgreater{} {[}Pa{]}}\label{hamt-surface-vapor-pressure-cell-n-pa}
+
+This is the vapor pressure of the cell in the surface. Together with the per-cell temperature it allows the dew point to be checked at each spatial node, supporting interstitial condensation analysis through the depth of the construction.
+
+\paragraph{HAMT Surface Heat Flux Cell \textless{}N\textgreater{} {[}W/m2{]}}\label{hamt-surface-heat-flux-cell-n-wm2}
+
+This is the conductive heat flux at the interior-facing face of the cell in the surface, positive in the exterior-to-interior direction.
 
 \subsection{Materials for Glass Windows and Doors}\label{materials-for-glass-windows-and-doors}
 
